@@ -10,8 +10,8 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 const char *ssid = "TP-Link_B36D";
 const char *password = "73039440";
-const char *progressUrl = "http://192.168.0.5:4409/printer/objects/query?display_status";
-const char *statsUrl = "http://192.168.0.5:4409/printer/objects/query?print_stats";
+String progressUrl = "http://192.168.0.13:4409/printer/objects/query?display_status";
+String statsUrl = "http://192.168.0.13:4409/printer/objects/query?print_stats";
 
 int spinnerIndex = 0;
 unsigned long lastAnimTime = 0;
@@ -19,16 +19,23 @@ unsigned long wifiStartTime = 0;
 const unsigned long wifiTimeout = 150000; // 150 seconds
 
 #pragma region setup
-void setup()
+void showSpinner(uint32_t colour = strip.Color(0, 0, 150))
 {
-  Serial.begin(BAUD_RATE); // Connect printer's USB serial to ESP32 RX
-  strip.begin();
+  strip.clear();
+  strip.setPixelColor(spinnerIndex, colour);
   strip.show();
-  Serial.println("ESP32 Progress Monitor Started");
 
-  connectToWifi();
+  spinnerIndex = (spinnerIndex + 1) % NUM_LEDS;
+  delay(100);
+}
 
-  Serial.println("\nWiFi connected!");
+void showError(uint32_t colour = strip.Color(255, 0, 0))
+{
+  for (int i = 0; i < NUM_LEDS; i++)
+  {
+    strip.setPixelColor(i, colour);
+  }
+  strip.show();
 }
 
 void connectToWifi()
@@ -54,58 +61,24 @@ void connectToWifi()
   }
 }
 
-void showSpinner(uint32_t colour = strip.Color(0, 0, 150))
+void setup()
 {
-  strip.clear();
-  strip.setPixelColor(spinnerIndex, colour);
+  Serial.begin(BAUD_RATE); // Connect printer's USB serial to ESP32 RX
+  strip.begin();
   strip.show();
+  Serial.println("ESP32 Progress Monitor Started");
 
-  spinnerIndex = (spinnerIndex + 1) % NUM_LEDS;
-  delay(100);
+  connectToWifi();
+
+  Serial.println("\nWiFi connected!");
 }
-
-void showError(uint32_t colour = strip.Color(255, 0, 0))
-{
-  for (int i = 0; i < NUM_LEDS; i++)
-  {
-    strip.setPixelColor(i, colour);
-  }
-  strip.show();
-}
-
 #pragma endregion
 
 #pragma region loop
-void loop()
-{
-  // usbserial();
-
-  // wifiserial();
-
-  test();
-}
-
-void test()
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    float progress = getProgress();
-    String state = getState();
-
-    if (state == "printing")
-    {
-      showProgress(progress);
-    }
-
-    delay(5000); // Check every 5s
-  }
-}
-
 void showProgress(float progress)
 {
   String progressString = String(progress * 100);
 
-  Serial.println("Progress: " + progressString + "%");
   int lit_leds = (int)(progress * NUM_LEDS);
   for (int i = 0; i < NUM_LEDS; i++)
   {
@@ -117,20 +90,68 @@ void showProgress(float progress)
   }
 }
 
-float getProgress()
+uint32_t Wheel(byte pos)
 {
-  HTTPClient httpProgress;
-  httpProgress.begin(progressUrl);
-
-  int httpProgress_code = httpProgress.GET();
-  String progressPayload = httpProgress.getString();
-
-  int progressIndex = progressPayload.indexOf("\"progress\":");
-  float progress = progressPayload.substring(progressIndex + 11).toFloat();
+  pos = 255 - pos;
+  if (pos < 85)
+    return strip.Color(255 - pos * 3, 0, pos * 3);
+  if (pos < 170)
+  {
+    pos -= 85;
+    return strip.Color(0, pos * 3, 255 - pos * 3);
+  }
+  pos -= 170;
+  return strip.Color(pos * 3, 255 - pos * 3, 0);
 }
 
-String getState(){
+void playCompletionAnimation()
+{
+  for (int j = 0; j < 256 * 2; j++)
+  { // two cycles of the rainbow
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, Wheel((i + j) & 255));
+    }
+    strip.show();
+    delay(20);
+  }
 
+  // Optional: turn strip solid green to indicate done
+  for (int i = 0; i < strip.numPixels(); i++)
+  {
+    strip.setPixelColor(i, strip.Color(0, 255, 0));
+  }
+  strip.show();
+}
+
+String getObject(String url, String object)
+{
+  HTTPClient http;
+  http.begin(url);
+
+  int httpCode = http.GET();
+  if (httpCode <= 0)
+    return "HTTP error";
+
+  String payload = http.getString();
+
+  int index = payload.indexOf("\"" + object + "\":");
+  if (index == -1)
+    return "not found";
+
+  // after `":`
+  int start = index + object.length() + 3;
+
+  // skip spaces or opening quote
+  while (payload.charAt(start) == ' ' || payload.charAt(start) == '"')
+    start++;
+
+  // untill endind delimiter
+  int end = start;
+  while (payload.charAt(end) != ',' && payload.charAt(end) != '}' && payload.charAt(end) != '"')
+    end++;
+
+  return payload.substring(start, end);
 }
 
 void usbserial()
@@ -242,4 +263,23 @@ void wifiserial()
   delay(5000); // Check every 5s
 }
 
+void loop()
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    float progress = getObject(progressUrl, "progress").toFloat();
+    String state = getObject(statsUrl, "state");
+
+    Serial.println("Progress: " + String(progress) + "%");
+    Serial.println("State: " + state);
+
+    if (state == "printing")
+      showProgress(progress);
+    
+    if (state == "complete")
+      playCompletionAnimation();
+    
+    delay(5000); // Check every 5s
+  }
+}
 #pragma endregion
