@@ -10,8 +10,9 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 const char *ssid = "TP-Link_B36D";
 const char *password = "73039440";
-String progressUrl = "http://192.168.0.13:4409/printer/objects/query?display_status";
-String statsUrl = "http://192.168.0.13:4409/printer/objects/query?print_stats";
+
+String progressUrl = ":4409/printer/objects/query?display_status";
+String statsUrl = ":4409/printer/objects/query?print_stats";
 
 int spinnerIndex = 0;
 unsigned long lastAnimTime = 0;
@@ -61,6 +62,46 @@ void connectToWifi()
   }
 }
 
+String getPrinterIP()
+{
+  String printerIP = "";
+
+  for (int i = 2; i < 255; i++)
+  {
+    String testIP = "http://192.168.0." + String(i);
+    Serial.println("Testing: " +  testIP);
+
+    HTTPClient http;
+
+    http.setTimeout(1000); // 1s timeout per request
+    http.begin(testIP);    // Open connection
+    int code = http.GET(); // Send GET request
+
+    if (code > 0)
+    {
+      String body = http.getString();
+      if (body.indexOf("Creality") != -1 || body.indexOf("Moonraker") != -1 || body.indexOf("Klipper") != -1)
+      {
+        Serial.print("Printer found at: ");
+        Serial.println(testIP);
+        printerIP = testIP;
+        http.end();
+        break;
+      }
+    }
+
+    http.end();
+    delay(50); // avoid flooding
+  }
+
+  if (printerIP == "")
+  {
+    Serial.println("Printer not found.");
+  }
+
+  return printerIP;
+}
+
 void setup()
 {
   Serial.begin(BAUD_RATE); // Connect printer's USB serial to ESP32 RX
@@ -69,8 +110,12 @@ void setup()
   Serial.println("ESP32 Progress Monitor Started");
 
   connectToWifi();
-
   Serial.println("\nWiFi connected!");
+
+  String printerIP = getPrinterIP();
+  progressUrl = printerIP + progressUrl;
+  statsUrl = printerIP + statsUrl;
+
 }
 #pragma endregion
 
@@ -83,7 +128,7 @@ void showProgress(float progress)
   for (int i = 0; i < NUM_LEDS; i++)
   {
     if (i < lit_leds)
-      strip.setPixelColor(i, strip.Color(0, 150, 0)); // Green
+      strip.setPixelColor(i, strip.Color(0, 50, 0)); // Green
     else
       strip.setPixelColor(i, 0); // Off
     strip.show();
@@ -270,15 +315,15 @@ void loop()
     float progress = getObject(progressUrl, "progress").toFloat();
     String state = getObject(statsUrl, "state");
 
-    Serial.println("Progress: " + String(progress) + "%");
+    Serial.println("Progress: " + String(progress * 100) + "%");
     Serial.println("State: " + state);
 
     if (state == "printing")
       showProgress(progress);
-    
+
     if (state == "complete")
       playCompletionAnimation();
-    
+
     delay(5000); // Check every 5s
   }
 }
