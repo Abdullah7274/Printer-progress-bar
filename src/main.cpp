@@ -8,8 +8,11 @@
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-const char *ssid = "TP-Link_B36D";
-const char *password = "73039440";
+// const char *ssid = "TP-Link_B36D";
+// const char *password = "73039440";
+
+const char *ssid = "Ismail WiFi Extender";
+const char *password = "0824434708";
 
 String progressUrl = ":4409/printer/objects/query?display_status";
 String statsUrl = ":4409/printer/objects/query?print_stats";
@@ -17,7 +20,7 @@ String statsUrl = ":4409/printer/objects/query?print_stats";
 int spinnerIndex = 0;
 unsigned long lastAnimTime = 0;
 unsigned long wifiStartTime = 0;
-const unsigned long wifiTimeout = 150000; // 150 seconds
+const unsigned long wifiTimeout = 15000; // 15 seconds
 
 #pragma region setup
 void showSpinner(uint32_t colour = strip.Color(0, 0, 150))
@@ -55,9 +58,9 @@ void connectToWifi()
     if (millis() - wifiStartTime > wifiTimeout)
     {
       Serial.println("\nWiFi Connection Timeout!");
-      showError(); // Red
-      while (true)
-        ; // Stop everything
+      //showError();
+      delay(1000);
+      break;
     }
   }
 }
@@ -69,7 +72,7 @@ String getPrinterIP()
   for (int i = 2; i < 255; i++)
   {
     String testIP = "http://192.168.0." + String(i);
-    Serial.println("Testing: " +  testIP);
+    Serial.println("Testing: " + testIP);
 
     HTTPClient http;
 
@@ -109,13 +112,16 @@ void setup()
   strip.show();
   Serial.println("ESP32 Progress Monitor Started");
 
-  connectToWifi();
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    connectToWifi();
+  }
+
   Serial.println("\nWiFi connected!");
 
   String printerIP = getPrinterIP();
   progressUrl = printerIP + progressUrl;
   statsUrl = printerIP + statsUrl;
-
 }
 #pragma endregion
 
