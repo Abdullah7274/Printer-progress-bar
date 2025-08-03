@@ -109,7 +109,7 @@ String getPrinterIP()
       Serial.println("Printer not found.");
     }
   }
-  
+
   return printerIP;
 }
 
@@ -205,7 +205,7 @@ String getObject(String url, String object)
   while (payload.charAt(start) == ' ' || payload.charAt(start) == '"')
     start++;
 
-  // untill endind delimiter
+  // untill ending delimiter
   int end = start;
   while (payload.charAt(end) != ',' && payload.charAt(end) != '}' && payload.charAt(end) != '"')
     end++;
@@ -326,8 +326,14 @@ void loop()
 {
   if (WiFi.status() == WL_CONNECTED)
   {
-    float progress = getObject(progressUrl, "progress").toFloat();
     String state = getObject(statsUrl, "state");
+    float progress = getObject(progressUrl, "progress").toFloat();
+
+    //retry if progress is 0
+    while (progress == 0 && state == "printing")
+    {
+      progress = getObject(progressUrl, "progress").toFloat();
+    }
 
     Serial.println("Progress: " + String(progress * 100) + "%");
     Serial.println("State: " + state);
