@@ -8,12 +8,12 @@
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-// const char *ssid = "TP-Link_B36D";
-// const char *password = "73039440";
-
-const char *ssid = "Ismail WiFi Extender";
+const char *ssid = "Ismail WiFi 2.4G";
 const char *password = "0824434708";
 
+bool staticIP = true;
+
+String printerIP = "http://192.168.0.212";
 String progressUrl = ":4409/printer/objects/query?display_status";
 String statsUrl = ":4409/printer/objects/query?print_stats";
 
@@ -58,7 +58,7 @@ void connectToWifi()
     if (millis() - wifiStartTime > wifiTimeout)
     {
       Serial.println("\nWiFi Connection Timeout!");
-      //showError();
+      // showError();
       delay(1000);
       break;
     }
@@ -67,41 +67,49 @@ void connectToWifi()
 
 String getPrinterIP()
 {
-  String printerIP = "";
-
-  for (int i = 2; i < 255; i++)
+  if (!staticIP)
   {
-    String testIP = "http://192.168.0." + String(i);
-    Serial.println("Testing: " + testIP);
+    String printerIP = "";
 
-    HTTPClient http;
-
-    http.setTimeout(1000); // 1s timeout per request
-    http.begin(testIP);    // Open connection
-    int code = http.GET(); // Send GET request
-
-    if (code > 0)
+    for (int i = 2; i < 255; i++)
     {
-      String body = http.getString();
-      if (body.indexOf("Creality") != -1 || body.indexOf("Moonraker") != -1 || body.indexOf("Klipper") != -1)
+      String testIP = "http://192.168.0." + String(i);
+      String testURL = testIP + ":4409/printer/objects";
+      Serial.println("Testing: " + testIP);
+
+      HTTPClient http;
+
+      http.setTimeout(1000); // 1s timeout per request
+      http.begin(testURL);   // Open connection
+      int code = http.GET(); // Send GET request
+
+      Serial.println("code: " + code);
+
+      if (code > 0)
       {
-        Serial.print("Printer found at: ");
-        Serial.println(testIP);
-        printerIP = testIP;
-        http.end();
-        break;
+        String body = http.getString();
+        Serial.println(body);
+
+        if (body.indexOf("Creality") != -1 || body.indexOf("Moonraker") != -1 || body.indexOf("Klipper") != -1)
+        {
+          Serial.print("Printer found at: ");
+          Serial.println(testIP);
+          printerIP = testIP;
+          http.end();
+          break;
+        }
       }
+
+      http.end();
+      delay(50); // avoid flooding
     }
 
-    http.end();
-    delay(50); // avoid flooding
+    if (printerIP == "")
+    {
+      Serial.println("Printer not found.");
+    }
   }
-
-  if (printerIP == "")
-  {
-    Serial.println("Printer not found.");
-  }
-
+  
   return printerIP;
 }
 
